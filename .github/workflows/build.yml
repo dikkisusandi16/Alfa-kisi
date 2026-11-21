@@ -8,13 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
@@ -236,6 +233,130 @@ jobs:
             function toast(t){
               var d=document.createElement('div');d.textContent=t;
               d.style.cssText='position:fixed;left:50%;bottom:30px;transform:translateX(-50%);z-index:2147483647;background:#111;color:#fff;padding:10px 16px;border-radius:99px;font:600 14px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.4);max-width:90%;text-align:center';
+              document.body.appendChild(d);setTimeout(function(){d.remove()},2500);
+            }
+            function soalTeks(){
+              var qs=document.querySelectorAll('.que'),out=[],L='ABCDEFGH';
+              qs.forEach(function(q,i){
+                var qt=q.querySelector('.qtext');if(!qt)return;
+                var no=q.querySelector('.qno'),n=no?no.textContent.trim():String(i+1);
+                var stem=qt.textContent.replace(/\s+/g,' ').trim(),opts=[];
+                q.querySelectorAll('.answer > div').forEach(function(el){
+                  var lab=el.querySelector('.flex-fill')||el.querySelector('label')||el;
+                  var c=lab.cloneNode(true),an=c.querySelector('.answernumber');if(an)an.remove();
+                  var t=c.textContent.replace(/^\s*[a-hA-H][\.\)]\s*/,'').replace(/\s+/g,' ').trim();
+                  if(t)opts.push(L.charAt(opts.length)+'. '+t);
+                });
+                out.push('SOAL '+n+'\n'+stem+(opts.length?'\n'+opts.join('\n'):''));
+              });
+              return out.length?{n:out.length,t:out.join('\n\n')}:null;
+            }
+            function tampil(teks){
+              var o=document.createElement('div');
+              o.style.cssText='position:fixed;left:10px;right:10px;top:10px;bottom:10px;z-index:2147483647;background:#fff;color:#111;border-radius:14px;padding:12px;box-shadow:0 6px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;font:14px system-ui,sans-serif';
+              var h=document.createElement('div');h.style.cssText='font-weight:700;margin-bottom:8px';
+              h.textContent='Salin manual: tekan lama di kotak, pilih Pilih semua, lalu Salin';
+              var ta=document.createElement('textarea');ta.value=teks;
+              ta.style.cssText='flex:1;width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:10px;padding:10px;font-size:14px;-webkit-user-select:text;user-select:text';
+              var b=document.createElement('button');b.textContent='Tutup';
+              b.style.cssText='margin-top:8px;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#4f46e5';
+              b.onclick=function(){o.remove()};
+              o.appendChild(h);o.appendChild(ta);o.appendChild(b);document.body.appendChild(o);
+            }
+            function salin(){
+              var r=soalTeks(),teks;
+              if(r)teks=r.t;
+              else{var m=document.querySelector('#region-main')||document.body;teks=m.innerText||m.textContent||'';}
+              var n=r?r.n+' soal':'teks halaman';
+              function fb(){
+                var ok=false;
+                try{
+                  var ta=document.createElement('textarea');ta.value=teks;ta.setAttribute('readonly','');
+                  ta.style.cssText='position:fixed;top:0;left:0;opacity:0;-webkit-user-select:text;user-select:text';
+                  document.body.appendChild(ta);ta.focus();ta.select();ta.setSelectionRange(0,teks.length);
+                  ok=document.execCommand('copy');ta.remove();
+                }catch(e){ok=false}
+                if(ok)toast('✅ '+n+' tersalin');else tampil(teks);
+              }
+              if(navigator.clipboard&&navigator.clipboard.writeText){
+                navigator.clipboard.writeText(teks).then(function(){toast('✅ '+n+' tersalin')},fb);
+              }else fb();
+            }
+            function jawab(){
+              if(window.__cjaRunFill){window.__cjaRunFill();}
+              else{alert('Bank jawaban belum siap. Periksa koneksi internet lalu muat ulang halaman.');}
+            }
+            function tombol(txt,bottom,label,fn){
+              var b=document.createElement('button');b.textContent=txt;b.setAttribute('aria-label',label);
+              b.style.cssText='position:fixed;right:14px;bottom:'+bottom+'px;z-index:2147483646;width:54px;height:54px;border-radius:50%;border:0;background:#4f46e5;color:#fff;font-size:26px;box-shadow:0 4px 14px rgba(0,0,0,.4)';
+              b.onclick=fn;document.body.appendChild(b);
+            }
+            function pasang(){
+              if(window.__cjaBtn||!document.body)return;window.__cjaBtn=1;
+              tombol('🔄',230,'Muat ulang halaman',function(){location.reload()});
+              tombol('📋',160,'Salin semua soal',salin);
+              tombol('🔎',90,'Tampilkan jawaban di bawah soal',jawab);
+            }
+            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',pasang);else pasang();
+          })();
+          /* CARI JAWABAN ALFA - tombol isi otomatis dari bank soal.
+             Membaca soal yang sedang tampil dan memilih jawaban yang cocok dari bank.js.
+             Untuk menghindari salah pilih, hanya jawaban tunggal yang tidak ambigu yang diisi. */
+          (function(){
+          var cs=document.currentScript,BASE=cs&&cs.src?cs.src.replace(/[^\/]*$/,''):'https://dikkisusandi16.github.io/Cari-Jawaban/';
+          function boot(){
+          var B=window.BANK.B,S=window.BANK.S;
+          if(!Array.isArray(B)){alert('Format bank.js tidak sesuai.');return;}
+          var N=function(s){return String(s).toLowerCase().replace(/_/g,'').replace(/\u2026/g,' ').replace(/[^a-z0-9\u00c0-\uffff]+/g,' ').trim()};
+          var canon=function(s){var n=N(s);return['benar','true','ya','betul'].indexOf(n)>=0?'T':['salah','false','tidak'].indexOf(n)>=0?'F':null};
+          var optKey=function(o){return o.map(N).sort().join('|')};
+          if(!window.__cjaIdx){var exact=new Map(),inv=new Map(),toks=[];
+          B.forEach(function(e,i){var k=N(e[0]);(exact.get(k)||exact.set(k,[]).get(k)).push(i);var t=new Set(k.split(' ').filter(function(w){return w.length>2}));toks.push(t);t.forEach(function(w){(inv.get(w)||inv.set(w,[]).get(w)).push(i)})});
+          window.__cjaIdx={exact:exact,inv:inv,toks:toks}}
+          var X=window.__cjaIdx;
+          function fuzzy(p){var q=new Set(N(p.stem).split(' ').filter(function(w){return w.length>2}));if(!q.size)return[];var sc=new Map();
+          q.forEach(function(w){var l=X.inv.get(w);if(!l)return;var idf=Math.log(1+B.length/l.length);l.forEach(function(i){sc.set(i,(sc.get(i)||0)+idf)})});
+          var r=Array.from(sc.entries()).sort(function(a,b){return b[1]-a[1]}).slice(0,150).map(function(x){var i=x[0],t=X.toks[i],c=0;q.forEach(function(w){if(t.has(w))c++});var d=2*c/(q.size+t.size);
+          if(p.opts.length&&B[i][1].length){var a=new Set(B[i][1].map(N));d=d*.8+.2*p.opts.filter(function(o){return a.has(N(o))}).length/Math.max(p.opts.length,B[i][1].length)}return[i,d]});
+          return r.sort(function(a,b){return b[1]-a[1]}).filter(function(x){return x[1]>=.7}).slice(0,3)}
+          function solve(p){var cands,kind,pct=100,ex=X.exact.get(N(p.stem));
+          if(ex){cands=ex;kind='exact'}else{var f=fuzzy(p);if(!f.length)return{nf:1};cands=f.map(function(x){return x[0]});kind='fuzzy';pct=Math.round(f[0][1]*100)}
+          var ok=optKey(p.opts);
+          if(!p.opts.length){var g={};cands.forEach(function(i){B[i][2].forEach(function(a){var c=canon(a[0])||N(a[0]);g[c]=g[c]||{t:canon(a[0])==='T'?'Benar':canon(a[0])==='F'?'Salah':a[0],n:0};g[c].n+=a[1].length})});
+          var l=Object.values(g).sort(function(a,b){return b.n-a.n});return{kind:kind,pct:pct,txt:l[0].t,conf:l.length>1}}
+          function match(o,t){var a=N(o),b=N(t);if(a===b)return 1;var c1=canon(o);if(c1&&c1===canon(t))return 1;return 0}
+          var sc=p.opts.map(function(o){var s=0,pre=0,no=N(o);cands.forEach(function(i){var w=optKey(B[i][1])===ok?3:1;B[i][2].forEach(function(a){if(match(o,a[0]))s+=w*a[1].length;else{var nt=N(a[0]);if(nt.length>=4&&no.indexOf(nt)===0)pre+=w*a[1].length*.5}})});return s||pre*.01});
+          var mx=Math.max.apply(null,sc);if(mx<=0)return{kind:kind,pct:pct,miss:1};
+          var top=[],alt=[];sc.forEach(function(s,i){if(s===mx)top.push(i);else if(s>0)alt.push(i)});return{kind:kind,pct:pct,top:top,alt:alt,conf:top.length>1||alt.length>0}}
+          window.__cja={solve:solve};
+          var L='ABCDEFGH';
+          function optText(el){var lab=el.querySelector('.flex-fill')||el.querySelector('label')||el;var c=lab.cloneNode(true);var n=c.querySelector('.answernumber');if(n)n.remove();return c.textContent.replace(/^\s*[a-hA-H][\.\)]\s*/,'').replace(/\s+/g,' ').trim()}
+          function runFill(){
+           var qs=document.querySelectorAll('.que'),filled=0,skipped=0,already=0;
+           qs.forEach(function(q){
+            var qt=q.querySelector('.qtext');if(!qt)return;
+            var stem=qt.textContent.replace(/Pilih salah satu:?|Select one:?|Pilih satu atau lebih:?|Select one or more:?/gi,' ').replace(/\s+/g,' ').trim();
+            var rows=Array.prototype.slice.call(q.querySelectorAll('.answer > div'));
+            var opts=rows.map(optText);
+            var r=solve({stem:stem,opts:opts});
+            if(r.nf||r.miss||r.txt!==undefined||!r.top||r.top.length!==1||r.conf||r.kind!=='exact'){skipped++;return;}
+            var idx=r.top[0],row=rows[idx],input=row&&row.querySelector('input[type="radio"],input[type="checkbox"]');
+            if(!input){skipped++;return;}
+            if(input.checked){already++;return;}
+            input.click();
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+            filled++;
+           });
+           var status=document.getElementById('cja-status');
+           if(status)status.textContent='Selesai: '+filled+' terisi · '+already+' sudah terpilih · '+skipped+' dilewati (tidak cocok/ambigu atau tidak didukung).';
+          }
+          window.__cjaRunFill=runFill;
+          console.log('CARI JAWABAN ALFA siap. Tekan tombol 🔎 untuk mengisi jawaban yang cocok.');
+          if(window.BANK)boot();else{var s=document.createElement('script');s.src=BASE+'bank.js';s.onload=boot;s.onerror=function(){alert('bank.js gagal dimuat. Cek alamat hosting.')};document.head.appendChild(s)}
+          })();
+          EOF
+          mkdir -p app/src/main/res/drawable-nodpi
+          echo 'iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAJVUlEQVR4nO2dW3(0,0,0,.4);max-width:90%;text-align:center';
               document.body.appendChild(d);setTimeout(function(){d.remove()},2500);
             }
             function soalTeks(){
