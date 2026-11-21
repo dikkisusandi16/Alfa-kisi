@@ -236,7 +236,122 @@ jobs:
               var st=document.createElement('style');
               st.textContent=
                 '.cja,.cja *{box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent}'+
-                '.cja-fab{position:fixed;right:16px;bottom:96px;z-index:'+Z+';display:flex;flex-direction:column;name: Build APK Cari Jawaban Alfa
+                '.cja-fab{position:fixed;right:16px;bottom:96px;z-index:'+Z+';display:flex;flex-direction:column;align-items:flex-end;gap:12px;touch-action:none}'+
+                '.cja-main{width:58px;height:58px;border-radius:50%;border:0;color:#fff;font-size:32px;line-height:1;background:linear-gradient(140deg,#6366f1,#7c3aed);box-shadow:0 8px 22px rgba(79,70,229,.55);transition:transform .25s}'+
+                '.cja-fab.on .cja-main{transform:rotate(45deg)}'+
+                '.cja-item{display:flex;align-items:center;gap:10px;opacity:0;transform:translateY(14px) scale(.92);pointer-events:none;transition:opacity .2s,transform .2s}'+
+                '.cja-fab.on .cja-item{opacity:1;transform:none;pointer-events:auto}'+
+                '.cja-ai{margin:10px 0;padding:10px 12px;border-radius:12px;background:#eef2ff;color:#1e1b4b;border-left:4px solid #6366f1;font-size:14px;line-height:1.45;white-space:pre-wrap}'+
+                '.cja-copy{float:right;margin:0 0 6px 8px;border:0;border-radius:999px;background:#0f172a;color:#fff;font-size:12px;font-weight:600;padding:5px 11px}'+
+                '.cja-lbl{background:rgba(15,23,42,.92);color:#fff;font-size:13px;font-weight:600;padding:7px 13px;border-radius:999px}'+
+                '.cja-mini{width:46px;height:46px;border-radius:50%;border:0;color:#fff;font-size:20px;background:#0f172a;box-shadow:0 6px 16px rgba(0,0,0,.4)}'+
+                '.cja-sheet{position:fixed;left:0;right:0;bottom:0;height:68vh;z-index:'+(Z+1)+';background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -10px 34px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden;transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1)}'+
+                '.cja-sheet.on{transform:none}'+
+                '.cja-head{display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;background:#0f172a;color:#fff;font-weight:700;font-size:14px}'+
+                '.cja-head span{flex:1}'+
+                '.cja-hb{border:0;border-radius:10px;background:rgba(255,255,255,.14);color:#fff;padding:6px 11px;font-size:15px}'+
+                '.cja-sheet iframe{flex:1;width:100%;border:0;background:#fff}'+
+                '.cja-toast{position:fixed;left:50%;top:14px;z-index:'+(Z+2)+';transform:translate(-50%,-80px);background:#0f172a;color:#fff;font-size:14px;font-weight:600;padding:10px 18px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:transform .25s;max-width:90vw}'+
+                '.cja-toast.on{transform:translate(-50%,0)}'+
+                '.cja-back{position:fixed;inset:0;z-index:'+(Z+2)+';background:rgba(15,23,42,.55);display:flex;align-items:flex-start;justify-content:center;padding:70px 14px}'+
+                '.cja-card{width:100%;max-width:420px;background:#fff;color:#0f172a;border-radius:18px;padding:16px;box-shadow:0 12px 34px rgba(0,0,0,.45)}'+
+                '.cja-card h3{margin:0 0 10px;font-size:16px}'+
+                '.cja-card input,.cja-card select{margin-bottom:8px;color:#0f172a;background:#fff;width:100%;padding:12px;border:1.5px solid #cbd5e1;border-radius:12px;font-size:15px;outline:0}'+
+                '.cja-card input:focus{border-color:#6366f1}'+
+                '.cja-row{display:flex;gap:8px;margin-top:10px}'+
+                '.cja-btn{flex:1;border:0;border-radius:12px;padding:11px;font-size:15px;font-weight:700;color:#fff}';
+              document.head.appendChild(st);
+
+              function el(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt)e.textContent=txt;return e}
+
+              /* toast */
+              var toast=el('div','cja cja-toast'),tt;document.body.appendChild(toast);
+              function info(t){toast.textContent=t;toast.classList.add('on');clearTimeout(tt);tt=setTimeout(function(){toast.classList.remove('on')},2200)}
+
+              /* panel bawah */
+              var sheet=null;
+              function panel(){
+                if(!sheet){
+                  sheet=el('div','cja cja-sheet');
+                  var h=el('div','cja-head');h.appendChild(el('span','','Cari Jawaban Alfa'));
+                  var rl=el('button','cja-hb','↻');rl.setAttribute('aria-label','Muat ulang');
+                  var x=el('button','cja-hb','✕');x.setAttribute('aria-label','Tutup');
+                  var f=document.createElement('iframe');f.src=HOME;f.setAttribute('allow','clipboard-read; clipboard-write');
+                  rl.onclick=function(){f.src=HOME};x.onclick=function(){sheet.classList.remove('on')};
+                  h.appendChild(rl);h.appendChild(x);sheet.appendChild(h);sheet.appendChild(f);document.body.appendChild(sheet);
+                  sheet.offsetHeight;
+                }
+                sheet.classList.toggle('on');
+              }
+
+              /* ===== bebas salin ===== */
+              var cs=document.createElement('style');
+              cs.textContent='*,*::before,*::after{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}';
+              document.head.appendChild(cs);
+              ['copy','cut','paste','contextmenu','selectstart','dragstart','mousedown'].forEach(function(n){
+                window.addEventListener(n,function(e){e.stopImmediatePropagation()},true);
+                document['on'+n]=null;if(document.body)document.body['on'+n]=null;
+              });
+              [].forEach.call(document.querySelectorAll('[oncopy],[oncut],[onpaste],[oncontextmenu],[onselectstart],[ondragstart],[onmousedown]'),function(e){
+                ['oncopy','oncut','onpaste','oncontextmenu','onselectstart','ondragstart','onmousedown'].forEach(function(a){e.removeAttribute(a)});
+              });
+              function salin(t){
+                function cadangan(){var a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.appendChild(a);a.select();try{document.execCommand('copy');info('Soal disalin ✓')}catch(e){info('Gagal menyalin')}a.remove()}
+                if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(function(){info('Soal disalin ✓')},cadangan);else cadangan();
+              }
+              function soalText(q){
+                var t=q.querySelector('.qtext'),teks=t?t.innerText.trim():q.innerText.trim();
+                var o=[].slice.call(q.querySelectorAll('.answer > div')).map(function(x){return x.innerText.trim()}).filter(Boolean);
+                return teks+(o.length?'\n\n'+o.join('\n'):'');
+              }
+              function pasangSalin(){
+                [].forEach.call(document.querySelectorAll('.que'),function(q){
+                  if(q.querySelector('.cja-copy'))return;
+                  var b=el('button','cja cja-copy','Salin soal');
+                  b.onclick=function(e){e.preventDefault();e.stopPropagation();salin(soalText(q))};
+                  q.insertBefore(b,q.firstChild);
+                });
+              }
+              pasangSalin();setTimeout(pasangSalin,1500);
+
+              /* ===== AI (kunci API milik kamu sendiri) ===== */
+              function ambil(k,d){try{return localStorage.getItem(k)||d}catch(e){return d}}
+              function kunci(){return ambil('cja_key','')}
+              function tanyaKunci(lanjut){
+                var b=el('div','cja cja-back'),c=el('div','cja-card');
+                c.appendChild(el('h3','','Pengaturan AI'));
+                var fm=document.createElement('select');
+                [['anthropic','Format Anthropic (/messages)'],['openai','Format OpenAI (/chat/completions)']].forEach(function(o){var op=document.createElement('option');op.value=o[0];op.textContent=o[1];fm.appendChild(op)});
+                fm.value=ambil('cja_fmt','anthropic');
+                function fld(ph,id,type,def){var i=document.createElement('input');i.type=type||'text';i.placeholder=ph;i.value=ambil(id,def||'');return i}
+                var u=fld('Base URL, mis. https://api.anthropic.com','cja_url','url','https://api.anthropic.com');
+                var m=fld('Nama model','cja_model','text','claude-sonnet-5-5');
+                var k=fld('Kunci API','cja_key','password','');
+                var r=el('div','cja-row');
+                var ok=el('button','cja-btn','Simpan');ok.style.background='#4f46e5';
+                var no=el('button','cja-btn','Batal');no.style.background='#64748b';
+                function tutup(){b.remove()}
+                ok.onclick=function(){
+                  var kv=k.value.trim(),uv=u.value.trim(),mv=m.value.trim();
+                  if(!kv||!uv||!mv){info('Isi semua kolom');return}
+                  if(!/^https:\/\//i.test(uv)){info('Alamat harus diawali https://');return}
+                  try{localStorage.setItem('cja_key',kv);localStorage.setItem('cja_url',uv);localStorage.setItem('cja_model',mv);localStorage.setItem('cja_fmt',fm.value)}catch(e){}
+                  tutup();info('Pengaturan disimpan ✓');if(lanjut)lanjut();
+                };
+                no.onclick=tutup;b.onclick=function(e){if(e.target===b)tutup()};
+                c.appendChild(fm);c.appendChild(u);c.appendChild(m);c.appendChild(k);
+                var w=el('div','','Kunci hanya dikirim ke alamat di atas. Pastikan alamatnya benar.');w.style.cssText='font-size:12px;color:#475569';c.appendChild(w);
+                r.appendChild(ok);r.appendChild(no);c.appendChild(r);b.appendChild(c);document.body.appendChild(b);
+              }
+              function kartu(q,t){
+                var x=q.querySelector('.cja-ai');
+                if(!x){x=el('div','cja cja-ai');(q.querySelector('.content')||q).appendChild(x)}
+                x.textContent=t;
+              }
+              function tanyaAI(q){
+                kartu(q,'🤖 AI sedang menjawab…');
+                var fmt=ambil('cja_fmt','anthropic'),base=ambil('cja_url','https://api.anthropic.com').replace(/\/+$/,''),model=ambil('cja_model','claude-sonnet-5-5');
+                var url=base,sys='Kamu membantu siswa berlatih soal tryout. Jawab dalam Bahasa Indonesia. Format: "Jawaban: <huruf/isi jawaban>" lalu penjelasan singkat 1-2 kalimat. Jika soal bergantung pada gambar yaname: Build APK Cari Jawaban Alfa
 
 on:
   push:
