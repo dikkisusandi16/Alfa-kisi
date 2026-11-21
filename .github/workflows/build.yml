@@ -1,0 +1,218 @@
+name: Build APK Cari Jawaban Alfa
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Buat proyek Android
+        run: |
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'CariJawabanAlfa'
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.5.2' apply false
+          }
+          EOF
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.nonTransitiveRClass=true
+          EOF
+          mkdir -p app
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.carijawaban.alfa'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.carijawaban.alfa'
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName '1.0'
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          EOF
+          mkdir -p app/src/main
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:label="Alfalearning Plus"
+                  android:icon="@drawable/ic_launcher"
+                  android:usesCleartextTraffic="false"
+                  android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden"
+                      android:windowSoftInputMode="adjustResize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          mkdir -p app/src/main/java/com/carijawaban/alfa
+          cat > app/src/main/java/com/carijawaban/alfa/MainActivity.java <<'EOF'
+          package com.carijawaban.alfa;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.ViewGroup;
+          import android.webkit.CookieManager;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import java.io.ByteArrayOutputStream;
+          import java.io.InputStream;
+
+          public class MainActivity extends Activity {
+              private WebView web;
+              private String js = "";
+              private static final String START = "https://alfalearning.sat.co.id/login/index.php";
+
+              @Override
+              protected void onCreate(Bundle saved) {
+                  super.onCreate(saved);
+                  try (InputStream in = getAssets().open("tombol.js")) {
+                      ByteArrayOutputStream out = new ByteArrayOutputStream();
+                      byte[] buf = new byte[4096];
+                      int n;
+                      while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                      js = out.toString("UTF-8");
+                  } catch (Exception e) {
+                      js = "";
+                  }
+                  web = new WebView(this);
+                  setContentView(web, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                  WebSettings s = web.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setUseWideViewPort(true);
+                  s.setLoadWithOverviewMode(true);
+                  CookieManager cm = CookieManager.getInstance();
+                  cm.setAcceptCookie(true);
+                  cm.setAcceptThirdPartyCookies(web, true);
+                  web.setWebChromeClient(new WebChromeClient());
+                  web.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public void onPageFinished(WebView view, String url) {
+                          super.onPageFinished(view, url);
+                          if (js.length() > 0) view.evaluateJavascript(js, null);
+                      }
+                  });
+                  if (saved == null) web.loadUrl(START); else web.restoreState(saved);
+              }
+
+              @Override
+              protected void onSaveInstanceState(Bundle out) {
+                  super.onSaveInstanceState(out);
+                  web.saveState(out);
+              }
+
+              @Override
+              public void onBackPressed() {
+                  if (web.canGoBack()) web.goBack(); else super.onBackPressed();
+              }
+          }
+          EOF
+          mkdir -p app/src/main/assets
+          cat > app/src/main/assets/tombol.js <<'EOF'
+          /* Dipakai di APK (FreeWebToApk) yang membuka Alfalearning sebagai halaman utama.
+             Menambah dua tombol bulat di atas halaman:
+             🔎 = tampilkan jawaban dari bank soal di bawah tiap soal
+             📖 = buka/tutup panel Cari Jawaban (aplikasi lengkap) di bagian bawah layar, TANPA pindah halaman.
+             Tempel di kolom "JavaScript" pada bagian "CSS Kustom, JavaScript & Skrip Pengguna". */
+          (function(){
+            var HOME='https://dikkisusandi16.github.io/Cari-Jawaban/';
+            if(location.hostname.indexOf('github.io')>=0)return;
+            var panel=null;
+            function tombol(txt,bottom,label,fn){
+              var b=document.createElement('button');b.textContent=txt;b.setAttribute('aria-label',label);
+              b.style.cssText='position:fixed;right:14px;bottom:'+bottom+'px;z-index:2147483646;width:54px;height:54px;border-radius:50%;border:0;background:#4f46e5;color:#fff;font-size:26px;box-shadow:0 4px 14px rgba(0,0,0,.4)';
+              b.onclick=fn;document.body.appendChild(b);
+            }
+            function bukaPanel(){
+              if(!panel){
+                panel=document.createElement('div');
+                panel.style.cssText='position:fixed;left:0;right:0;bottom:0;height:62vh;z-index:2147483647;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.35);display:none;flex-direction:column;overflow:hidden';
+                var bar=document.createElement('div');
+                bar.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:#4f46e5;color:#fff;font:700 14px system-ui,sans-serif';
+                bar.innerHTML='<span>🔎 CARI JAWABAN ALFA</span>';
+                var x=document.createElement('button');x.textContent='✖';x.setAttribute('aria-label','Tutup');
+                x.style.cssText='border:0;background:rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:4px 12px;font-size:16px';
+                x.onclick=function(){panel.style.display='none'};bar.appendChild(x);
+                var f=document.createElement('iframe');f.src=HOME;f.setAttribute('allow','clipboard-read; clipboard-write');
+                f.style.cssText='flex:1;width:100%;border:0;background:#fff';
+                panel.appendChild(bar);panel.appendChild(f);document.body.appendChild(panel);
+              }
+              panel.style.display=panel.style.display==='flex'?'none':'flex';
+            }
+            function jawab(){
+              var s=document.createElement('script');
+              s.src=HOME+'alfa-helper.js?v='+Date.now();
+              s.onerror=function(){alert('Gagal memuat alfa-helper.js. Cek internet atau alamat GitHub Pages.')};
+              document.head.appendChild(s);
+            }
+            function pasang(){
+              if(window.__cjaBtn||!document.body)return;window.__cjaBtn=1;
+              tombol('📖',160,'Buka panel Cari Jawaban',bukaPanel);
+              tombol('🔎',90,'Tampilkan jawaban di bawah soal',jawab);
+            }
+            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',pasang);else pasang();
+          })();
+          EOF
+          mkdir -p app/src/main/res/drawable-nodpi
+          echo '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' | base64 -d > app/src/main/res/drawable-nodpi/ic_launcher.png
+          ls -R app | head -40
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Simpan APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CariJawabanAlfa-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          
