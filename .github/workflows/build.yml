@@ -1,0 +1,259 @@
+name: Build APK Cari Jawaban Alfa
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Buat proyek Android
+        run: |
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'CariJawabanAlfa'
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.5.2' apply false
+          }
+          EOF
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.nonTransitiveRClass=true
+          EOF
+          mkdir -p app
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.carijawaban.alfa'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.carijawaban.alfa'
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 3
+                  versionName '1.2'
+              }
+              signingConfigs {
+                  debug {
+                      storeFile file('debug.keystore')
+                      storePassword 'android'
+                      keyAlias 'androiddebugkey'
+                      keyPassword 'android'
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          EOF
+          mkdir -p app/src/main
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:label="Alfalearning Plus"
+                  android:icon="@drawable/ic_launcher"
+                  android:usesCleartextTraffic="false"
+                  android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:configChanges="orientation|screenSize|keyboardHidden"
+                      android:windowSoftInputMode="adjustResize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+                          <data android:scheme="https" android:host="alfalearning.sat.co.id" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.SEND" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <data android:mimeType="text/plain" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          mkdir -p app/src/main/java/com/carijawaban/alfa
+          cat > app/src/main/java/com/carijawaban/alfa/MainActivity.java <<'EOF'
+          package com.carijawaban.alfa;
+
+          import android.app.Activity;
+          import android.app.AlertDialog;
+          import android.content.Intent;
+          import android.os.Bundle;
+          import android.view.ViewGroup;
+          import android.webkit.CookieManager;
+          import android.webkit.JsResult;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import java.io.ByteArrayOutputStream;
+          import java.io.InputStream;
+          import java.util.regex.Matcher;
+          import java.util.regex.Pattern;
+
+          public class MainActivity extends Activity {
+              private WebView web;
+              private String js = "";
+              private static final String START = "https://alfalearning.sat.co.id/login/index.php";
+
+              private String target(Intent i) {
+                  if (i != null) {
+                      String a = i.getAction();
+                      if (Intent.ACTION_VIEW.equals(a) && i.getData() != null) {
+                          return i.getData().toString();
+                      }
+                      if (Intent.ACTION_SEND.equals(a)) {
+                          String t = i.getStringExtra(Intent.EXTRA_TEXT);
+                          if (t != null) {
+                              Matcher m = Pattern.compile("https?://\\S+").matcher(t);
+                              if (m.find()) return m.group();
+                          }
+                      }
+                  }
+                  return START;
+              }
+
+              @Override
+              protected void onCreate(Bundle saved) {
+                  super.onCreate(saved);
+                  try (InputStream in = getAssets().open("tombol.js")) {
+                      ByteArrayOutputStream out = new ByteArrayOutputStream();
+                      byte[] buf = new byte[4096];
+                      int n;
+                      while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                      js = out.toString("UTF-8");
+                  } catch (Exception e) {
+                      js = "";
+                  }
+                  web = new WebView(this);
+                  setContentView(web, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                  WebSettings s = web.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setUseWideViewPort(true);
+                  s.setLoadWithOverviewMode(true);
+                  CookieManager cm = CookieManager.getInstance();
+                  cm.setAcceptCookie(true);
+                  cm.setAcceptThirdPartyCookies(web, true);
+                  web.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public boolean onJsAlert(WebView view, String url, String message, final JsResult result) {
+                          new AlertDialog.Builder(MainActivity.this)
+                              .setMessage(message)
+                              .setPositiveButton("OK", (d, w) -> result.confirm())
+                              .setOnCancelListener(d -> result.cancel())
+                              .show();
+                          return true;
+                      }
+                  });
+                  web.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public void onPageFinished(WebView view, String url) {
+                          super.onPageFinished(view, url);
+                          if (js.length() > 0) view.evaluateJavascript(js, null);
+                      }
+                  });
+                  if (saved == null) web.loadUrl(target(getIntent())); else web.restoreState(saved);
+              }
+
+              @Override
+              protected void onNewIntent(Intent intent) {
+                  super.onNewIntent(intent);
+                  setIntent(intent);
+                  String a = intent.getAction();
+                  if (Intent.ACTION_VIEW.equals(a) || Intent.ACTION_SEND.equals(a)) {
+                      web.loadUrl(target(intent));
+                  }
+              }
+
+              @Override
+              protected void onSaveInstanceState(Bundle out) {
+                  super.onSaveInstanceState(out);
+                  web.saveState(out);
+              }
+
+              @Override
+              public void onBackPressed() {
+                  if (web.canGoBack()) web.goBack(); else super.onBackPressed();
+              }
+          }
+          EOF
+          mkdir -p app/src/main/assets
+          cat > app/src/main/assets/tombol.js <<'EOF'
+          /* Dipakai di APK yang membuka Alfalearning sebagai halaman utama.
+             Menambah satu tombol bulat 🔎 di atas halaman: ketuk untuk menampilkan jawaban dari bank soal
+             di bawah tiap soal. Script ini tidak mengeklik atau mengisi jawaban apa pun. */
+          (function(){
+            var HOME='https://dikkisusandi16.github.io/Cari-Jawaban/';
+            if(location.hostname.indexOf('github.io')>=0)return;
+            function jawab(){
+              var s=document.createElement('script');
+              s.src=HOME+'alfa-helper.js?v='+Date.now();
+              s.onerror=function(){alert('Gagal memuat alfa-helper.js. Cek internet atau alamat GitHub Pages.')};
+              document.head.appendChild(s);
+            }
+            function pasang(){
+              if(window.__cjaBtn||!document.body)return;window.__cjaBtn=1;
+              var b=document.createElement('button');
+              b.textContent='🔎';b.setAttribute('aria-label','Tampilkan jawaban di bawah soal');
+              b.style.cssText='position:fixed;right:14px;bottom:90px;z-index:2147483646;width:54px;height:54px;border-radius:50%;border:0;background:#4f46e5;color:#fff;font-size:26px;box-shadow:0 4px 14px rgba(0,0,0,.4)';
+              b.onclick=jawab;document.body.appendChild(b);
+            }
+            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',pasang);else pasang();
+          })();
+          EOF
+          mkdir -p app/src/main/res/drawable-nodpi
+          echo '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' | base64 -d > app/src/main/res/drawable-nodpi/ic_launcher.png
+          echo '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' | base64 -d > app/debug.keystore
+          ls -R app | head -40
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Simpan APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CariJawabanAlfa-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          
