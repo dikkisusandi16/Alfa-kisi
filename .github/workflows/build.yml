@@ -135,6 +135,7 @@ jobs:
           public class MainActivity extends Activity {
               private WebView web;
               private String js = "";
+              private String helperJs = "";
               private static final String START = "https://alfalearning.sat.co.id/login/index.php";
 
               private String target(Intent i) {
@@ -166,6 +167,15 @@ jobs:
                   } catch (Exception e) {
                       js = "";
                   }
+                  try (InputStream in = getAssets().open("helper.js")) {
+                      ByteArrayOutputStream out = new ByteArrayOutputStream();
+                      byte[] buf = new byte[4096];
+                      int n;
+                      while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                      helperJs = out.toString("UTF-8");
+                  } catch (Exception e) {
+                      helperJs = "";
+                  }
                   web = new WebView(this);
                   setContentView(web, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                   WebSettings s = web.getSettings();
@@ -192,6 +202,7 @@ jobs:
                       public void onPageFinished(WebView view, String url) {
                           super.onPageFinished(view, url);
                           if (js.length() > 0) view.evaluateJavascript(js, null);
+                          if (helperJs.length() > 0) view.evaluateJavascript(helperJs, null);
                       }
                   });
                   if (saved == null) web.loadUrl(target(getIntent())); else web.restoreState(saved);
@@ -220,13 +231,78 @@ jobs:
           }
           EOF
           mkdir -p app/src/main/assets
+          cat > app/src/main/assets/helper.js <<'EOF'
+          /* CARI JAWABAN ALFA - tombol isi otomatis dari bank soal.
+             Membaca soal yang sedang tampil dan memilih jawaban yang cocok dari bank.js.
+             Untuk menghindari salah pilih, hanya jawaban tunggal yang tidak ambigu yang diisi. */
+          (function(){
+          var BASE='https://dikkisusandi16.github.io/Cari-Jawaban/';
+          function boot(){
+          var B=window.BANK.B,S=window.BANK.S;
+          if(!Array.isArray(B)){alert('Format bank.js tidak sesuai.');return;}
+          var N=function(s){return String(s).toLowerCase().replace(/_/g,'').replace(/\u2026/g,' ').replace(/[^a-z0-9\u00c0-\uffff]+/g,' ').trim()};
+          var canon=function(s){var n=N(s);return['benar','true','ya','betul'].indexOf(n)>=0?'T':['salah','false','tidak'].indexOf(n)>=0?'F':null};
+          var optKey=function(o){return o.map(N).sort().join('|')};
+          if(!window.__cjaIdx){var exact=new Map(),inv=new Map(),toks=[];
+          B.forEach(function(e,i){var k=N(e[0]);(exact.get(k)||exact.set(k,[]).get(k)).push(i);var t=new Set(k.split(' ').filter(function(w){return w.length>2}));toks.push(t);t.forEach(function(w){(inv.get(w)||inv.set(w,[]).get(w)).push(i)})});
+          window.__cjaIdx={exact:exact,inv:inv,toks:toks}}
+          var X=window.__cjaIdx;
+          function fuzzy(p){var q=new Set(N(p.stem).split(' ').filter(function(w){return w.length>2}));if(!q.size)return[];var sc=new Map();
+          q.forEach(function(w){var l=X.inv.get(w);if(!l)return;var idf=Math.log(1+B.length/l.length);l.forEach(function(i){sc.set(i,(sc.get(i)||0)+idf)})});
+          var r=Array.from(sc.entries()).sort(function(a,b){return b[1]-a[1]}).slice(0,150).map(function(x){var i=x[0],t=X.toks[i],c=0;q.forEach(function(w){if(t.has(w))c++});var d=2*c/(q.size+t.size);
+          if(p.opts.length&&B[i][1].length){var a=new Set(B[i][1].map(N));d=d*.8+.2*p.opts.filter(function(o){return a.has(N(o))}).length/Math.max(p.opts.length,B[i][1].length)}return[i,d]});
+          return r.sort(function(a,b){return b[1]-a[1]}).filter(function(x){return x[1]>=.7}).slice(0,3)}
+          function solve(p){var cands,kind,pct=100,ex=X.exact.get(N(p.stem));
+          if(ex){cands=ex;kind='exact'}else{var f=fuzzy(p);if(!f.length)return{nf:1};cands=f.map(function(x){return x[0]});kind='fuzzy';pct=Math.round(f[0][1]*100)}
+          var ok=optKey(p.opts);
+          if(!p.opts.length){var g={};cands.forEach(function(i){B[i][2].forEach(function(a){var c=canon(a[0])||N(a[0]);g[c]=g[c]||{t:canon(a[0])==='T'?'Benar':canon(a[0])==='F'?'Salah':a[0],n:0};g[c].n+=a[1].length})});
+          var l=Object.values(g).sort(function(a,b){return b.n-a.n});return{kind:kind,pct:pct,txt:l[0].t,conf:l.length>1}}
+          function match(o,t){var a=N(o),b=N(t);if(a===b)return 1;var c1=canon(o);if(c1&&c1===canon(t))return 1;return 0}
+          var sc=p.opts.map(function(o){var s=0,pre=0,no=N(o);cands.forEach(function(i){var w=optKey(B[i][1])===ok?3:1;B[i][2].forEach(function(a){if(match(o,a[0]))s+=w*a[1].length;else{var nt=N(a[0]);if(nt.length>=4&&no.indexOf(nt)===0)pre+=w*a[1].length*.5}})});return s||pre*.01});
+          var mx=Math.max.apply(null,sc);if(mx<=0)return{kind:kind,pct:pct,miss:1};
+          var top=[],alt=[];sc.forEach(function(s,i){if(s===mx)top.push(i);else if(s>0)alt.push(i)});return{kind:kind,pct:pct,top:top,alt:alt,conf:top.length>1||alt.length>0}}
+          window.__cja={solve:solve};
+          var L='ABCDEFGH';
+          function optText(el){var lab=el.querySelector('.flex-fill')||el.querySelector('label')||el;var c=lab.cloneNode(true);var n=c.querySelector('.answernumber');if(n)n.remove();return c.textContent.replace(/^\s*[a-hA-H][\.\)]\s*/,'').replace(/\s+/g,' ').trim()}
+          function runFill(){
+           var qs=document.querySelectorAll('.que'),filled=0,skipped=0,already=0;
+           qs.forEach(function(q){
+            var qt=q.querySelector('.qtext');if(!qt)return;
+            var stem=qt.textContent.replace(/Pilih salah satu:?|Select one:?|Pilih satu atau lebih:?|Select one or more:?/gi,' ').replace(/\s+/g,' ').trim();
+            var rows=Array.prototype.slice.call(q.querySelectorAll('.answer > div'));
+            var opts=rows.map(optText);
+            var r=solve({stem:stem,opts:opts});
+            if(r.nf||r.miss||r.txt!==undefined||!r.top||r.top.length!==1||r.conf||r.kind!=='exact'){skipped++;return;}
+            var idx=r.top[0],row=rows[idx],input=row&&row.querySelector('input[type="radio"],input[type="checkbox"]');
+            if(!input){skipped++;return;}
+            if(input.checked){already++;return;}
+            input.click();
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+            filled++;
+           });
+           var status=document.getElementById('cja-status');
+           if(status)status.textContent='Selesai: '+filled+' terisi · '+already+' sudah terpilih · '+skipped+' dilewati (tidak cocok/ambigu atau tidak didukung).';
+          }
+          if(document.getElementById('cja-auto-fill-btn'))return;
+          var btn=document.createElement('button');
+          btn.id='cja-auto-fill-btn';
+          btn.type='button';btn.textContent='ISI SEMUA JAWABAN';
+          btn.style.cssText='position:fixed;z-index:2147483647;right:14px;bottom:18px;background:#166534;color:white;border:0;border-radius:999px;padding:14px 18px;font:700 14px system-ui;box-shadow:0 4px 16px #0005;';
+          var status=document.createElement('div');status.id='cja-status';
+          status.style.cssText='position:fixed;z-index:2147483647;right:14px;bottom:76px;max-width:85vw;background:#fff;color:#111;padding:8px 11px;border-radius:8px;font:12px system-ui;box-shadow:0 2px 12px #0003;';
+          btn.addEventListener('click',runFill);
+          document.body.appendChild(status);document.body.appendChild(btn);
+          console.log('CARI JAWABAN ALFA siap. Tekan tombol ISI SEMUA JAWABAN.');
+          if(window.BANK)boot();else{var s=document.createElement('script');s.src=BASE+'bank.js';s.onload=boot;s.onerror=function(){alert('bank.js gagal dimuat. Cek alamat hosting.')};document.head.appendChild(s)}
+          })();
+          EOF
           cat > app/src/main/assets/tombol.js <<'EOF'
           /* Dipakai di APK yang membuka Alfalearning sebagai halaman utama.
              Tiga tombol bulat di atas halaman:
-             🔎 = tampilkan jawaban dari bank soal di bawah tiap soal
+             🔎 = pintasan; tombol ISI SEMUA JAWABAN disediakan oleh helper.js
              📋 = salin semua soal di halaman (soal + pilihan A-E), walau teksnya tidak bisa diblok
              🔄 = muat ulang halaman
-             Script ini tidak mengeklik atau mengisi jawaban apa pun. */
+             Pengisian dilakukan oleh helper.js berdasarkan bank jawaban. */
           (function(){
             var HOME='https://dikkisusandi16.github.io/Cari-Jawaban/';
             if(location.hostname.indexOf('github.io')>=0)return;
@@ -283,8 +359,8 @@ jobs:
               }else fb();
             }
             function jawab(){
-              if(window.__cjaRunFill){window.__cjaRunFill();}
-              else{alert('Bank jawaban belum siap. Periksa koneksi internet lalu muat ulang halaman.');}
+              if(window.__cjaAutoFill){window.__cjaAutoFill();return;}
+              toast('Tombol ISI SEMUA JAWABAN sedang disiapkan. Tunggu sebentar.');
             }
             function tombol(txt,bottom,label,fn){
               var b=document.createElement('button');b.textContent=txt;b.setAttribute('aria-label',label);
@@ -298,61 +374,6 @@ jobs:
               tombol('🔎',90,'Tampilkan jawaban di bawah soal',jawab);
             }
             if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',pasang);else pasang();
-          })();
-          /* CARI JAWABAN ALFA - tombol isi otomatis dari bank soal.
-             Membaca soal yang sedang tampil dan memilih jawaban yang cocok dari bank.js.
-             Untuk menghindari salah pilih, hanya jawaban tunggal yang tidak ambigu yang diisi. */
-          (function(){
-          var cs=document.currentScript,BASE=cs&&cs.src?cs.src.replace(/[^\/]*$/,''):'https://dikkisusandi16.github.io/Cari-Jawaban/';
-          function boot(){
-          var B=window.BANK.B,S=window.BANK.S;
-          if(!Array.isArray(B)){alert('Format bank.js tidak sesuai.');return;}
-          var N=function(s){return String(s).toLowerCase().replace(/_/g,'').replace(/\u2026/g,' ').replace(/[^a-z0-9\u00c0-\uffff]+/g,' ').trim()};
-          var canon=function(s){var n=N(s);return['benar','true','ya','betul'].indexOf(n)>=0?'T':['salah','false','tidak'].indexOf(n)>=0?'F':null};
-          var optKey=function(o){return o.map(N).sort().join('|')};
-          if(!window.__cjaIdx){var exact=new Map(),inv=new Map(),toks=[];
-          B.forEach(function(e,i){var k=N(e[0]);(exact.get(k)||exact.set(k,[]).get(k)).push(i);var t=new Set(k.split(' ').filter(function(w){return w.length>2}));toks.push(t);t.forEach(function(w){(inv.get(w)||inv.set(w,[]).get(w)).push(i)})});
-          window.__cjaIdx={exact:exact,inv:inv,toks:toks}}
-          var X=window.__cjaIdx;
-          function fuzzy(p){var q=new Set(N(p.stem).split(' ').filter(function(w){return w.length>2}));if(!q.size)return[];var sc=new Map();
-          q.forEach(function(w){var l=X.inv.get(w);if(!l)return;var idf=Math.log(1+B.length/l.length);l.forEach(function(i){sc.set(i,(sc.get(i)||0)+idf)})});
-          var r=Array.from(sc.entries()).sort(function(a,b){return b[1]-a[1]}).slice(0,150).map(function(x){var i=x[0],t=X.toks[i],c=0;q.forEach(function(w){if(t.has(w))c++});var d=2*c/(q.size+t.size);
-          if(p.opts.length&&B[i][1].length){var a=new Set(B[i][1].map(N));d=d*.8+.2*p.opts.filter(function(o){return a.has(N(o))}).length/Math.max(p.opts.length,B[i][1].length)}return[i,d]});
-          return r.sort(function(a,b){return b[1]-a[1]}).filter(function(x){return x[1]>=.7}).slice(0,3)}
-          function solve(p){var cands,kind,pct=100,ex=X.exact.get(N(p.stem));
-          if(ex){cands=ex;kind='exact'}else{var f=fuzzy(p);if(!f.length)return{nf:1};cands=f.map(function(x){return x[0]});kind='fuzzy';pct=Math.round(f[0][1]*100)}
-          var ok=optKey(p.opts);
-          if(!p.opts.length){var g={};cands.forEach(function(i){B[i][2].forEach(function(a){var c=canon(a[0])||N(a[0]);g[c]=g[c]||{t:canon(a[0])==='T'?'Benar':canon(a[0])==='F'?'Salah':a[0],n:0};g[c].n+=a[1].length})});
-          var l=Object.values(g).sort(function(a,b){return b.n-a.n});return{kind:kind,pct:pct,txt:l[0].t,conf:l.length>1}}
-          function match(o,t){var a=N(o),b=N(t);if(a===b)return 1;var c1=canon(o);if(c1&&c1===canon(t))return 1;return 0}
-          var sc=p.opts.map(function(o){var s=0,pre=0,no=N(o);cands.forEach(function(i){var w=optKey(B[i][1])===ok?3:1;B[i][2].forEach(function(a){if(match(o,a[0]))s+=w*a[1].length;else{var nt=N(a[0]);if(nt.length>=4&&no.indexOf(nt)===0)pre+=w*a[1].length*.5}})});return s||pre*.01});
-          var mx=Math.max.apply(null,sc);if(mx<=0)return{kind:kind,pct:pct,miss:1};
-          var top=[],alt=[];sc.forEach(function(s,i){if(s===mx)top.push(i);else if(s>0)alt.push(i)});return{kind:kind,pct:pct,top:top,alt:alt,conf:top.length>1||alt.length>0}}
-          window.__cja={solve:solve};
-          var L='ABCDEFGH';
-          function optText(el){var lab=el.querySelector('.flex-fill')||el.querySelector('label')||el;var c=lab.cloneNode(true);var n=c.querySelector('.answernumber');if(n)n.remove();return c.textContent.replace(/^\s*[a-hA-H][\.\)]\s*/,'').replace(/\s+/g,' ').trim()}
-          function runFill(){
-           var qs=document.querySelectorAll('.que'),filled=0,skipped=0,already=0;
-           qs.forEach(function(q){
-            var qt=q.querySelector('.qtext');if(!qt)return;
-            var stem=qt.textContent.replace(/Pilih salah satu:?|Select one:?|Pilih satu atau lebih:?|Select one or more:?/gi,' ').replace(/\s+/g,' ').trim();
-            var rows=Array.prototype.slice.call(q.querySelectorAll('.answer > div'));
-            var opts=rows.map(optText);
-            var r=solve({stem:stem,opts:opts});
-            if(r.nf||r.miss||r.txt!==undefined||!r.top||r.top.length!==1||r.conf||r.kind!=='exact'){skipped++;return;}
-            var idx=r.top[0],row=rows[idx],input=row&&row.querySelector('input[type="radio"],input[type="checkbox"]');
-            if(!input){skipped++;return;}
-            if(input.checked){already++;return;}
-            input.click();
-            input.dispatchEvent(new Event('change',{bubbles:true}));
-            filled++;
-           });
-           var status=document.getElementById('cja-status');
-           if(status)status.textContent='Selesai: '+filled+' terisi · '+already+' sudah terpilih · '+skipped+' dilewati (tidak cocok/ambigu atau tidak didukung).';
-          }
-          window.__cjaRunFill=runFill;
-          console.log('CARI JAWABAN ALFA siap. Tekan tombol 🔎 untuk mengisi jawaban yang cocok.');
-          if(window.BANK)boot();else{var s=document.createElement('script');s.src=BASE+'bank.js';s.onload=boot;s.onerror=function(){alert('bank.js gagal dimuat. Cek alamat hosting.')};document.head.appendChild(s)}
           })();
           EOF
           mkdir -p app/src/main/res/drawable-nodpi
