@@ -1,283 +1,37 @@
-name: Build APK - Cari Jawaban Alfa (Mode Belajar)
+name: Build APK Cari Jawaban Alfa
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: build-cari-jawaban-alfa
-  cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-      - name: Ambil source repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Siapkan Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Siapkan Gradle 8.7
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-          cache-disabled: true
 
-      - name: Buat bank.js bawaan
-        shell: bash
-        run: |
-          cat > bank.js <<'BANK_EOF'
-          /* CARI JAWABAN ALFA - BANK SOAL
-             Data soal dapat ditambahkan pada array BANK.B.
-             Format:
-             ["Teks pertanyaan", ["Pilihan A", "Pilihan B"], [["Jawaban benar", 1]]]
-          */
-          window.BANK = {
-            B: [],
-            S: []
-          };
-          BANK_EOF
+      - name: Buat proyek Android
+        run: echo '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' | base64 -d | tar xz
 
-      - name: Buat proyek Android mode belajar
-        shell: bash
-        run: |
-          mkdir -p app/src/main/java/id/cari/jawabanalfa app/src/main/assets
+      - name: Cek isi proyek
+        run: find . -maxdepth 6 -type f -not -path './.git/*' | sort
 
-          cat > settings.gradle <<'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          rootProject.name = 'CariJawabanAlfa'
-          include ':app'
-          EOF
-
-          cat > build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.5.2' apply false
-          }
-          EOF
-
-          cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          android.nonTransitiveRClass=true
-          EOF
-
-          cat > app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application'
-          }
-
-          android {
-              namespace 'id.cari.jawabanalfa'
-              compileSdk 34
-
-              defaultConfig {
-                  applicationId 'id.cari.jawabanalfa'
-                  minSdk 23
-                  targetSdk 34
-                  versionCode 1
-                  versionName '1.0'
-              }
-
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          }
-          EOF
-
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application
-                  android:allowBackup="false"
-                  android:label="Cari Jawaban Alfa"
-                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
-                  android:usesCleartextTraffic="false">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:screenOrientation="unspecified">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-
-          cat > app/src/main/java/id/cari/jawabanalfa/MainActivity.java <<'EOF'
-          package id.cari.jawabanalfa;
-
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.webkit.WebChromeClient;
-          import android.webkit.WebSettings;
-          import android.webkit.WebView;
-          import android.webkit.WebViewClient;
-
-          public class MainActivity extends Activity {
-              private WebView web;
-
-              @Override
-              protected void onCreate(Bundle state) {
-                  super.onCreate(state);
-                  web = new WebView(this);
-                  WebSettings settings = web.getSettings();
-                  settings.setJavaScriptEnabled(true);
-                  settings.setDomStorageEnabled(true);
-                  settings.setAllowFileAccess(true);
-                  settings.setAllowContentAccess(false);
-                  web.setWebViewClient(new WebViewClient());
-                  web.setWebChromeClient(new WebChromeClient());
-                  setContentView(web);
-                  if (state == null) {
-                      web.loadUrl("file:///android_asset/index.html");
-                  } else {
-                      web.restoreState(state);
-                  }
-              }
-
-              @Override
-              protected void onSaveInstanceState(Bundle out) {
-                  super.onSaveInstanceState(out);
-                  if (web != null) web.saveState(out);
-              }
-
-              @Override
-              public void onBackPressed() {
-                  if (web != null && web.canGoBack()) web.goBack();
-                  else super.onBackPressed();
-              }
-
-              @Override
-              protected void onDestroy() {
-                  if (web != null) {
-                      web.loadUrl("about:blank");
-                      web.destroy();
-                      web = null;
-                  }
-                  super.onDestroy();
-              }
-          }
-          EOF
-
-          cp bank.js app/src/main/assets/bank.js
-
-          cat > app/src/main/assets/index.html <<'EOF'
-          <!doctype html>
-          <html lang="id">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-            <meta name="theme-color" content="#102a43">
-            <title>Cari Jawaban Alfa</title>
-            <style>
-              *{box-sizing:border-box}
-              body{margin:0;background:#f2f5f9;color:#172b4d;font-family:Arial,sans-serif}
-              header{background:#102a43;color:#fff;padding:22px 18px 18px}
-              h1{font-size:22px;margin:0 0 6px}
-              header p{margin:0;color:#d9e6f2;font-size:13px}
-              main{max-width:760px;margin:auto;padding:14px}
-              .tools{position:sticky;top:0;background:#f2f5f9;padding:4px 0 12px;z-index:2}
-              input{width:100%;padding:14px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px;background:#fff}
-              .meta{font-size:13px;color:#52657a;margin:4px 2px 12px}
-              .card{background:#fff;border:1px solid #e1e8f0;border-radius:14px;padding:15px;margin:0 0 12px;box-shadow:0 2px 8px #102a4310}
-              .q{font-weight:700;line-height:1.5;margin-bottom:10px}
-              .opt{padding:8px 10px;margin:5px 0;background:#f5f7fa;border-radius:8px;font-size:14px;line-height:1.4}
-              .answer{margin-top:12px;padding:11px;background:#e8f7ee;border:1px solid #b8e4c8;border-radius:10px;color:#14532d;font-weight:700;line-height:1.5}
-              .empty{padding:20px;text-align:center;background:#fff;border-radius:12px;color:#52657a;line-height:1.5}
-              .foot{font-size:12px;color:#64748b;text-align:center;padding:10px}
-            </style>
-          </head>
-          <body>
-            <header>
-              <h1>📚 Cari Jawaban Alfa</h1>
-              <p>Mode belajar — cari soal dan pelajari jawaban dari bank soal.</p>
-            </header>
-            <main>
-              <div class="tools">
-                <input id="search" type="search" placeholder="Cari pertanyaan atau kata kunci..." autocomplete="off">
-              </div>
-              <div id="meta" class="meta">Memuat bank soal...</div>
-              <section id="list"></section>
-              <div class="foot">Jawaban ditampilkan sesuai data bank.js. Periksa kembali materi sumber.</div>
-            </main>
-            <script src="bank.js"></script>
-            <script>
-            (function(){
-              const list=document.getElementById('list');
-              const meta=document.getElementById('meta');
-              const search=document.getElementById('search');
-              const data=(window.BANK && Array.isArray(window.BANK.B))?window.BANK.B:[];
-              const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-              function answerText(row){
-                const a=Array.isArray(row[2])?row[2]:[];
-                if(!a.length)return 'Jawaban belum tersedia di bank.';
-                return a.map(x=>{
-                  if(Array.isArray(x))return esc(x[0])+(x[1]&&Array.isArray(x[1])&&x[1].length?' <small>(data: '+esc(x[1].length)+' kali)</small>':'');
-                  return esc(x);
-                }).join('<br>');
-              }
-              function render(){
-                const q=search.value.trim().toLowerCase();
-                const found=data.filter(row=>Array.isArray(row)&&String(row[0]||'').toLowerCase().includes(q));
-                meta.textContent=found.length+' dari '+data.length+' soal';
-                if(!found.length){
-                  list.innerHTML='<div class="empty">'+(data.length?'Soal tidak ditemukan. Coba kata kunci lain.':'Bank soal masih kosong. Isi data soal pada bank.js, lalu jalankan build kembali.')+'</div>';
-                  return;
-                }
-                list.innerHTML=found.map((row,i)=>{
-                  const opts=Array.isArray(row[1])?row[1]:[];
-                  return '<article class="card"><div class="q">'+(i+1)+'. '+esc(row[0])+'</div>'+
-                    opts.map((o,j)=>'<div class="opt">'+String.fromCharCode(65+j)+'. '+esc(o)+'</div>').join('')+
-                    '<div class="answer">Jawaban:<br>'+answerText(row)+'</div></article>';
-                }).join('');
-              }
-              if(!window.BANK || !Array.isArray(window.BANK.B)){
-                meta.textContent='Bank soal tidak terbaca';
-                list.innerHTML='<div class="empty">Format bank.js tidak sesuai. Pastikan file mendefinisikan window.BANK = { B: [...], S: [...] }.</div>';
-              } else {
-                render();
-                search.addEventListener('input',render);
-              }
-            })();
-            </script>
-          </body>
-          </html>
-          EOF
-
-      - name: Build APK debug
-        run: gradle --no-daemon --stacktrace assembleDebug
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
 
       - name: Simpan APK
         uses: actions/upload-artifact@v4
         with:
-          name: Cari-Jawaban-Alfa-APK
+          name: CariJawabanAlfa-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
           
