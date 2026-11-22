@@ -1,27 +1,58 @@
-name: Build APK Cari Jawaban Alfa
+name: Build APK - Cari Jawaban Alfa (Mode Belajar)
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: build-cari-jawaban-alfa
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 30
 
-      - uses: actions/setup-java@v4
+    steps:
+      - name: Ambil source repository
+        uses: actions/checkout@v4
+
+      - name: Siapkan Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Siapkan Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Buat proyek Android
+      - name: Buat bank.js bawaan
+        shell: bash
         run: |
+          cat > bank.js <<'BANK_EOF'
+          /* CARI JAWABAN ALFA - BANK SOAL
+             Data soal dapat ditambahkan pada array BANK.B.
+             Format:
+             ["Teks pertanyaan", ["Pilihan A", "Pilihan B"], [["Jawaban benar", 1]]]
+          */
+          window.BANK = {
+            B: [],
+            S: []
+          };
+          BANK_EOF
+
+      - name: Buat proyek Android mode belajar
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/id/cari/jawabanalfa app/src/main/assets
+
           cat > settings.gradle <<'EOF'
           pluginManagement {
               repositories {
@@ -31,6 +62,7 @@ jobs:
               }
           }
           dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
                   google()
                   mavenCentral()
@@ -39,353 +71,213 @@ jobs:
           rootProject.name = 'CariJawabanAlfa'
           include ':app'
           EOF
+
           cat > build.gradle <<'EOF'
           plugins {
               id 'com.android.application' version '8.5.2' apply false
           }
           EOF
+
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
           android.nonTransitiveRClass=true
           EOF
-          mkdir -p app
+
           cat > app/build.gradle <<'EOF'
           plugins {
               id 'com.android.application'
           }
+
           android {
-              namespace 'com.carijawaban.alfa'
+              namespace 'id.cari.jawabanalfa'
               compileSdk 34
+
               defaultConfig {
-                  applicationId 'com.carijawaban.alfa'
-                  minSdk 24
+                  applicationId 'id.cari.jawabanalfa'
+                  minSdk 23
                   targetSdk 34
-                  versionCode 4
-                  versionName '1.3'
+                  versionCode 1
+                  versionName '1.0'
               }
-              signingConfigs {
-                  debug {
-                      storeFile file('debug.keystore')
-                      storePassword 'android'
-                      keyAlias 'androiddebugkey'
-                      keyPassword 'android'
-                  }
-              }
+
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
               }
           }
           EOF
-          mkdir -p app/src/main
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET" />
               <application
-                  android:label="Alfalearning Plus"
-                  android:icon="@drawable/ic_launcher"
-                  android:usesCleartextTraffic="false"
-                  android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+                  android:allowBackup="false"
+                  android:label="Cari Jawaban Alfa"
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:usesCleartextTraffic="false">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
-                      android:launchMode="singleTask"
-                      android:configChanges="orientation|screenSize|keyboardHidden"
-                      android:windowSoftInputMode="adjustResize">
+                      android:screenOrientation="unspecified">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                      <intent-filter>
-                          <action android:name="android.intent.action.VIEW" />
-                          <category android:name="android.intent.category.DEFAULT" />
-                          <category android:name="android.intent.category.BROWSABLE" />
-                          <data android:scheme="https" android:host="alfalearning.sat.co.id" />
-                      </intent-filter>
-                      <intent-filter>
-                          <action android:name="android.intent.action.SEND" />
-                          <category android:name="android.intent.category.DEFAULT" />
-                          <data android:mimeType="text/plain" />
                       </intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
-          mkdir -p app/src/main/java/com/carijawaban/alfa
-          cat > app/src/main/java/com/carijawaban/alfa/MainActivity.java <<'EOF'
-          package com.carijawaban.alfa;
+
+          cat > app/src/main/java/id/cari/jawabanalfa/MainActivity.java <<'EOF'
+          package id.cari.jawabanalfa;
 
           import android.app.Activity;
-          import android.app.AlertDialog;
-          import android.content.Intent;
           import android.os.Bundle;
-          import android.view.ViewGroup;
-          import android.webkit.CookieManager;
-          import android.webkit.JsResult;
           import android.webkit.WebChromeClient;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
-          import java.io.ByteArrayOutputStream;
-          import java.io.InputStream;
-          import java.util.regex.Matcher;
-          import java.util.regex.Pattern;
 
           public class MainActivity extends Activity {
               private WebView web;
-              private String js = "";
-              private String helperJs = "";
-              private static final String START = "https://alfalearning.sat.co.id/login/index.php";
-
-              private String target(Intent i) {
-                  if (i != null) {
-                      String a = i.getAction();
-                      if (Intent.ACTION_VIEW.equals(a) && i.getData() != null) {
-                          return i.getData().toString();
-                      }
-                      if (Intent.ACTION_SEND.equals(a)) {
-                          String t = i.getStringExtra(Intent.EXTRA_TEXT);
-                          if (t != null) {
-                              Matcher m = Pattern.compile("https?://\\S+").matcher(t);
-                              if (m.find()) return m.group();
-                          }
-                      }
-                  }
-                  return START;
-              }
 
               @Override
-              protected void onCreate(Bundle saved) {
-                  super.onCreate(saved);
-                  try (InputStream in = getAssets().open("tombol.js")) {
-                      ByteArrayOutputStream out = new ByteArrayOutputStream();
-                      byte[] buf = new byte[4096];
-                      int n;
-                      while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-                      js = out.toString("UTF-8");
-                  } catch (Exception e) {
-                      js = "";
-                  }
-                  try (InputStream in = getAssets().open("helper.js")) {
-                      ByteArrayOutputStream out = new ByteArrayOutputStream();
-                      byte[] buf = new byte[4096];
-                      int n;
-                      while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-                      helperJs = out.toString("UTF-8");
-                  } catch (Exception e) {
-                      helperJs = "";
-                  }
+              protected void onCreate(Bundle state) {
+                  super.onCreate(state);
                   web = new WebView(this);
-                  setContentView(web, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                  WebSettings s = web.getSettings();
-                  s.setJavaScriptEnabled(true);
-                  s.setDomStorageEnabled(true);
-                  s.setUseWideViewPort(true);
-                  s.setLoadWithOverviewMode(true);
-                  CookieManager cm = CookieManager.getInstance();
-                  cm.setAcceptCookie(true);
-                  cm.setAcceptThirdPartyCookies(web, true);
-                  web.setWebChromeClient(new WebChromeClient() {
-                      @Override
-                      public boolean onJsAlert(WebView view, String url, String message, final JsResult result) {
-                          new AlertDialog.Builder(MainActivity.this)
-                              .setMessage(message)
-                              .setPositiveButton("OK", (d, w) -> result.confirm())
-                              .setOnCancelListener(d -> result.cancel())
-                              .show();
-                          return true;
-                      }
-                  });
-                  web.setWebViewClient(new WebViewClient() {
-                      @Override
-                      public void onPageFinished(WebView view, String url) {
-                          super.onPageFinished(view, url);
-                          if (js.length() > 0) view.evaluateJavascript(js, null);
-                          if (helperJs.length() > 0) view.evaluateJavascript(helperJs, null);
-                      }
-                  });
-                  if (saved == null) web.loadUrl(target(getIntent())); else web.restoreState(saved);
-              }
-
-              @Override
-              protected void onNewIntent(Intent intent) {
-                  super.onNewIntent(intent);
-                  setIntent(intent);
-                  String a = intent.getAction();
-                  if (Intent.ACTION_VIEW.equals(a) || Intent.ACTION_SEND.equals(a)) {
-                      web.loadUrl(target(intent));
+                  WebSettings settings = web.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setAllowContentAccess(false);
+                  web.setWebViewClient(new WebViewClient());
+                  web.setWebChromeClient(new WebChromeClient());
+                  setContentView(web);
+                  if (state == null) {
+                      web.loadUrl("file:///android_asset/index.html");
+                  } else {
+                      web.restoreState(state);
                   }
               }
 
               @Override
               protected void onSaveInstanceState(Bundle out) {
                   super.onSaveInstanceState(out);
-                  web.saveState(out);
+                  if (web != null) web.saveState(out);
               }
 
               @Override
               public void onBackPressed() {
-                  if (web.canGoBack()) web.goBack(); else super.onBackPressed();
+                  if (web != null && web.canGoBack()) web.goBack();
+                  else super.onBackPressed();
               }
-          }
-          EOF
-          mkdir -p app/src/main/assets
-          cat > app/src/main/assets/helper.js <<'EOF'
-          /* CARI JAWABAN ALFA - tombol isi otomatis dari bank soal.
-             Membaca soal yang sedang tampil dan memilih jawaban yang cocok dari bank.js.
-             Untuk menghindari salah pilih, hanya jawaban tunggal yang tidak ambigu yang diisi. */
-          (function(){
-          var BASE='https://dikkisusandi16.github.io/Cari-Jawaban/';
-          function boot(){
-          var B=window.BANK.B,S=window.BANK.S;
-          if(!Array.isArray(B)){alert('Format bank.js tidak sesuai.');return;}
-          var N=function(s){return String(s).toLowerCase().replace(/_/g,'').replace(/\u2026/g,' ').replace(/[^a-z0-9\u00c0-\uffff]+/g,' ').trim()};
-          var canon=function(s){var n=N(s);return['benar','true','ya','betul'].indexOf(n)>=0?'T':['salah','false','tidak'].indexOf(n)>=0?'F':null};
-          var optKey=function(o){return o.map(N).sort().join('|')};
-          if(!window.__cjaIdx){var exact=new Map(),inv=new Map(),toks=[];
-          B.forEach(function(e,i){var k=N(e[0]);(exact.get(k)||exact.set(k,[]).get(k)).push(i);var t=new Set(k.split(' ').filter(function(w){return w.length>2}));toks.push(t);t.forEach(function(w){(inv.get(w)||inv.set(w,[]).get(w)).push(i)})});
-          window.__cjaIdx={exact:exact,inv:inv,toks:toks}}
-          var X=window.__cjaIdx;
-          function fuzzy(p){var q=new Set(N(p.stem).split(' ').filter(function(w){return w.length>2}));if(!q.size)return[];var sc=new Map();
-          q.forEach(function(w){var l=X.inv.get(w);if(!l)return;var idf=Math.log(1+B.length/l.length);l.forEach(function(i){sc.set(i,(sc.get(i)||0)+idf)})});
-          var r=Array.from(sc.entries()).sort(function(a,b){return b[1]-a[1]}).slice(0,150).map(function(x){var i=x[0],t=X.toks[i],c=0;q.forEach(function(w){if(t.has(w))c++});var d=2*c/(q.size+t.size);
-          if(p.opts.length&&B[i][1].length){var a=new Set(B[i][1].map(N));d=d*.8+.2*p.opts.filter(function(o){return a.has(N(o))}).length/Math.max(p.opts.length,B[i][1].length)}return[i,d]});
-          return r.sort(function(a,b){return b[1]-a[1]}).filter(function(x){return x[1]>=.7}).slice(0,3)}
-          function solve(p){var cands,kind,pct=100,ex=X.exact.get(N(p.stem));
-          if(ex){cands=ex;kind='exact'}else{var f=fuzzy(p);if(!f.length)return{nf:1};cands=f.map(function(x){return x[0]});kind='fuzzy';pct=Math.round(f[0][1]*100)}
-          var ok=optKey(p.opts);
-          if(!p.opts.length){var g={};cands.forEach(function(i){B[i][2].forEach(function(a){var c=canon(a[0])||N(a[0]);g[c]=g[c]||{t:canon(a[0])==='T'?'Benar':canon(a[0])==='F'?'Salah':a[0],n:0};g[c].n+=a[1].length})});
-          var l=Object.values(g).sort(function(a,b){return b.n-a.n});return{kind:kind,pct:pct,txt:l[0].t,conf:l.length>1}}
-          function match(o,t){var a=N(o),b=N(t);if(a===b)return 1;var c1=canon(o);if(c1&&c1===canon(t))return 1;return 0}
-          var sc=p.opts.map(function(o){var s=0,pre=0,no=N(o);cands.forEach(function(i){var w=optKey(B[i][1])===ok?3:1;B[i][2].forEach(function(a){if(match(o,a[0]))s+=w*a[1].length;else{var nt=N(a[0]);if(nt.length>=4&&no.indexOf(nt)===0)pre+=w*a[1].length*.5}})});return s||pre*.01});
-          var mx=Math.max.apply(null,sc);if(mx<=0)return{kind:kind,pct:pct,miss:1};
-          var top=[],alt=[];sc.forEach(function(s,i){if(s===mx)top.push(i);else if(s>0)alt.push(i)});return{kind:kind,pct:pct,top:top,alt:alt,conf:top.length>1||alt.length>0}}
-          window.__cja={solve:solve};
-          var L='ABCDEFGH';
-          function optText(el){var lab=el.querySelector('.flex-fill')||el.querySelector('label')||el;var c=lab.cloneNode(true);var n=c.querySelector('.answernumber');if(n)n.remove();return c.textContent.replace(/^\s*[a-hA-H][\.\)]\s*/,'').replace(/\s+/g,' ').trim()}
-          function runFill(){
-           var qs=document.querySelectorAll('.que'),filled=0,skipped=0,already=0;
-           qs.forEach(function(q){
-            var qt=q.querySelector('.qtext');if(!qt)return;
-            var stem=qt.textContent.replace(/Pilih salah satu:?|Select one:?|Pilih satu atau lebih:?|Select one or more:?/gi,' ').replace(/\s+/g,' ').trim();
-            var rows=Array.prototype.slice.call(q.querySelectorAll('.answer > div'));
-            var opts=rows.map(optText);
-            var r=solve({stem:stem,opts:opts});
-            if(r.nf||r.miss||r.txt!==undefined||!r.top||r.top.length!==1||r.conf||r.kind!=='exact'){skipped++;return;}
-            var idx=r.top[0],row=rows[idx],input=row&&row.querySelector('input[type="radio"],input[type="checkbox"]');
-            if(!input){skipped++;return;}
-            if(input.checked){already++;return;}
-            input.click();
-            input.dispatchEvent(new Event('change',{bubbles:true}));
-            filled++;
-           });
-           var status=document.getElementById('cja-status');
-           if(status)status.textContent='Selesai: '+filled+' terisi · '+already+' sudah terpilih · '+skipped+' dilewati (tidak cocok/ambigu atau tidak didukung).';
-          }
-          if(document.getElementById('cja-auto-fill-btn'))return;
-          var btn=document.createElement('button');
-          btn.id='cja-auto-fill-btn';
-          btn.type='button';btn.textContent='ISI SEMUA JAWABAN';
-          btn.style.cssText='position:fixed;z-index:2147483647;right:14px;bottom:18px;background:#166534;color:white;border:0;border-radius:999px;padding:14px 18px;font:700 14px system-ui;box-shadow:0 4px 16px #0005;';
-          var status=document.createElement('div');status.id='cja-status';
-          status.style.cssText='position:fixed;z-index:2147483647;right:14px;bottom:76px;max-width:85vw;background:#fff;color:#111;padding:8px 11px;border-radius:8px;font:12px system-ui;box-shadow:0 2px 12px #0003;';
-          btn.addEventListener('click',runFill);
-          document.body.appendChild(status);document.body.appendChild(btn);
-          console.log('CARI JAWABAN ALFA siap. Tekan tombol ISI SEMUA JAWABAN.');
-          if(window.BANK)boot();else{var s=document.createElement('script');s.src=BASE+'bank.js';s.onload=boot;s.onerror=function(){alert('bank.js gagal dimuat. Cek alamat hosting.')};document.head.appendChild(s)}
-          })();
-          EOF
-          cat > app/src/main/assets/tombol.js <<'EOF'
-          /* Dipakai di APK yang membuka Alfalearning sebagai halaman utama.
-             Tiga tombol bulat di atas halaman:
-             🔎 = pintasan; tombol ISI SEMUA JAWABAN disediakan oleh helper.js
-             📋 = salin semua soal di halaman (soal + pilihan A-E), walau teksnya tidak bisa diblok
-             🔄 = muat ulang halaman
-             Pengisian dilakukan oleh helper.js berdasarkan bank jawaban. */
-          (function(){
-            var HOME='https://dikkisusandi16.github.io/Cari-Jawaban/';
-            if(location.hostname.indexOf('github.io')>=0)return;
-            function toast(t){
-              var d=document.createElement('div');d.textContent=t;
-              d.style.cssText='position:fixed;left:50%;bottom:30px;transform:translateX(-50%);z-index:2147483647;background:#111;color:#fff;padding:10px 16px;border-radius:99px;font:600 14px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.4);max-width:90%;text-align:center';
-              document.body.appendChild(d);setTimeout(function(){d.remove()},2500);
-            }
-            function soalTeks(){
-              var qs=document.querySelectorAll('.que'),out=[],L='ABCDEFGH';
-              qs.forEach(function(q,i){
-                var qt=q.querySelector('.qtext');if(!qt)return;
-                var no=q.querySelector('.qno'),n=no?no.textContent.trim():String(i+1);
-                var stem=qt.textContent.replace(/\s+/g,' ').trim(),opts=[];
-                q.querySelectorAll('.answer > div').forEach(function(el){
-                  var lab=el.querySelector('.flex-fill')||el.querySelector('label')||el;
-                  var c=lab.cloneNode(true),an=c.querySelector('.answernumber');if(an)an.remove();
-                  var t=c.textContent.replace(/^\s*[a-hA-H][\.\)]\s*/,'').replace(/\s+/g,' ').trim();
-                  if(t)opts.push(L.charAt(opts.length)+'. '+t);
-                });
-                out.push('SOAL '+n+'\n'+stem+(opts.length?'\n'+opts.join('\n'):''));
-              });
-              return out.length?{n:out.length,t:out.join('\n\n')}:null;
-            }
-            function tampil(teks){
-              var o=document.createElement('div');
-              o.style.cssText='position:fixed;left:10px;right:10px;top:10px;bottom:10px;z-index:2147483647;background:#fff;color:#111;border-radius:14px;padding:12px;box-shadow:0 6px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;font:14px system-ui,sans-serif';
-              var h=document.createElement('div');h.style.cssText='font-weight:700;margin-bottom:8px';
-              h.textContent='Salin manual: tekan lama di kotak, pilih Pilih semua, lalu Salin';
-              var ta=document.createElement('textarea');ta.value=teks;
-              ta.style.cssText='flex:1;width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:10px;padding:10px;font-size:14px;-webkit-user-select:text;user-select:text';
-              var b=document.createElement('button');b.textContent='Tutup';
-              b.style.cssText='margin-top:8px;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#4f46e5';
-              b.onclick=function(){o.remove()};
-              o.appendChild(h);o.appendChild(ta);o.appendChild(b);document.body.appendChild(o);
-            }
-            function salin(){
-              var r=soalTeks(),teks;
-              if(r)teks=r.t;
-              else{var m=document.querySelector('#region-main')||document.body;teks=m.innerText||m.textContent||'';}
-              var n=r?r.n+' soal':'teks halaman';
-              function fb(){
-                var ok=false;
-                try{
-                  var ta=document.createElement('textarea');ta.value=teks;ta.setAttribute('readonly','');
-                  ta.style.cssText='position:fixed;top:0;left:0;opacity:0;-webkit-user-select:text;user-select:text';
-                  document.body.appendChild(ta);ta.focus();ta.select();ta.setSelectionRange(0,teks.length);
-                  ok=document.execCommand('copy');ta.remove();
-                }catch(e){ok=false}
-                if(ok)toast('✅ '+n+' tersalin');else tampil(teks);
-              }
-              if(navigator.clipboard&&navigator.clipboard.writeText){
-                navigator.clipboard.writeText(teks).then(function(){toast('✅ '+n+' tersalin')},fb);
-              }else fb();
-            }
-            function jawab(){
-              if(window.__cjaAutoFill){window.__cjaAutoFill();return;}
-              toast('Tombol ISI SEMUA JAWABAN sedang disiapkan. Tunggu sebentar.');
-            }
-            function tombol(txt,bottom,label,fn){
-              var b=document.createElement('button');b.textContent=txt;b.setAttribute('aria-label',label);
-              b.style.cssText='position:fixed;right:14px;bottom:'+bottom+'px;z-index:2147483646;width:54px;height:54px;border-radius:50%;border:0;background:#4f46e5;color:#fff;font-size:26px;box-shadow:0 4px 14px rgba(0,0,0,.4)';
-              b.onclick=fn;document.body.appendChild(b);
-            }
-            function pasang(){
-              if(window.__cjaBtn||!document.body)return;window.__cjaBtn=1;
-              tombol('🔄',230,'Muat ulang halaman',function(){location.reload()});
-              tombol('📋',160,'Salin semua soal',salin);
-              tombol('🔎',90,'Tampilkan jawaban di bawah soal',jawab);
-            }
-            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',pasang);else pasang();
-          })();
-          EOF
-          mkdir -p app/src/main/res/drawable-nodpi
-          echo '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' | base64 -d > app/src/main/res/drawable-nodpi/ic_launcher.png
-          echo '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' | base64 -d > app/debug.keystore
-          ls -R app | head -40
 
-      - name: Build APK
-        run: gradle assembleDebug --no-daemon
+              @Override
+              protected void onDestroy() {
+                  if (web != null) {
+                      web.loadUrl("about:blank");
+                      web.destroy();
+                      web = null;
+                  }
+                  super.onDestroy();
+              }
+          }
+          EOF
+
+          cp bank.js app/src/main/assets/bank.js
+
+          cat > app/src/main/assets/index.html <<'EOF'
+          <!doctype html>
+          <html lang="id">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+            <meta name="theme-color" content="#102a43">
+            <title>Cari Jawaban Alfa</title>
+            <style>
+              *{box-sizing:border-box}
+              body{margin:0;background:#f2f5f9;color:#172b4d;font-family:Arial,sans-serif}
+              header{background:#102a43;color:#fff;padding:22px 18px 18px}
+              h1{font-size:22px;margin:0 0 6px}
+              header p{margin:0;color:#d9e6f2;font-size:13px}
+              main{max-width:760px;margin:auto;padding:14px}
+              .tools{position:sticky;top:0;background:#f2f5f9;padding:4px 0 12px;z-index:2}
+              input{width:100%;padding:14px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px;background:#fff}
+              .meta{font-size:13px;color:#52657a;margin:4px 2px 12px}
+              .card{background:#fff;border:1px solid #e1e8f0;border-radius:14px;padding:15px;margin:0 0 12px;box-shadow:0 2px 8px #102a4310}
+              .q{font-weight:700;line-height:1.5;margin-bottom:10px}
+              .opt{padding:8px 10px;margin:5px 0;background:#f5f7fa;border-radius:8px;font-size:14px;line-height:1.4}
+              .answer{margin-top:12px;padding:11px;background:#e8f7ee;border:1px solid #b8e4c8;border-radius:10px;color:#14532d;font-weight:700;line-height:1.5}
+              .empty{padding:20px;text-align:center;background:#fff;border-radius:12px;color:#52657a;line-height:1.5}
+              .foot{font-size:12px;color:#64748b;text-align:center;padding:10px}
+            </style>
+          </head>
+          <body>
+            <header>
+              <h1>📚 Cari Jawaban Alfa</h1>
+              <p>Mode belajar — cari soal dan pelajari jawaban dari bank soal.</p>
+            </header>
+            <main>
+              <div class="tools">
+                <input id="search" type="search" placeholder="Cari pertanyaan atau kata kunci..." autocomplete="off">
+              </div>
+              <div id="meta" class="meta">Memuat bank soal...</div>
+              <section id="list"></section>
+              <div class="foot">Jawaban ditampilkan sesuai data bank.js. Periksa kembali materi sumber.</div>
+            </main>
+            <script src="bank.js"></script>
+            <script>
+            (function(){
+              const list=document.getElementById('list');
+              const meta=document.getElementById('meta');
+              const search=document.getElementById('search');
+              const data=(window.BANK && Array.isArray(window.BANK.B))?window.BANK.B:[];
+              const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+              function answerText(row){
+                const a=Array.isArray(row[2])?row[2]:[];
+                if(!a.length)return 'Jawaban belum tersedia di bank.';
+                return a.map(x=>{
+                  if(Array.isArray(x))return esc(x[0])+(x[1]&&Array.isArray(x[1])&&x[1].length?' <small>(data: '+esc(x[1].length)+' kali)</small>':'');
+                  return esc(x);
+                }).join('<br>');
+              }
+              function render(){
+                const q=search.value.trim().toLowerCase();
+                const found=data.filter(row=>Array.isArray(row)&&String(row[0]||'').toLowerCase().includes(q));
+                meta.textContent=found.length+' dari '+data.length+' soal';
+                if(!found.length){
+                  list.innerHTML='<div class="empty">'+(data.length?'Soal tidak ditemukan. Coba kata kunci lain.':'Bank soal masih kosong. Isi data soal pada bank.js, lalu jalankan build kembali.')+'</div>';
+                  return;
+                }
+                list.innerHTML=found.map((row,i)=>{
+                  const opts=Array.isArray(row[1])?row[1]:[];
+                  return '<article class="card"><div class="q">'+(i+1)+'. '+esc(row[0])+'</div>'+
+                    opts.map((o,j)=>'<div class="opt">'+String.fromCharCode(65+j)+'. '+esc(o)+'</div>').join('')+
+                    '<div class="answer">Jawaban:<br>'+answerText(row)+'</div></article>';
+                }).join('');
+              }
+              if(!window.BANK || !Array.isArray(window.BANK.B)){
+                meta.textContent='Bank soal tidak terbaca';
+                list.innerHTML='<div class="empty">Format bank.js tidak sesuai. Pastikan file mendefinisikan window.BANK = { B: [...], S: [...] }.</div>';
+              } else {
+                render();
+                search.addEventListener('input',render);
+              }
+            })();
+            </script>
+          </body>
+          </html>
+          EOF
+
+      - name: Build APK debug
+        run: gradle --no-daemon --stacktrace assembleDebug
 
       - name: Simpan APK
         uses: actions/upload-artifact@v4
         with:
-          name: CariJawabanAlfa-APK
+          name: Cari-Jawaban-Alfa-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+          
